@@ -7,6 +7,7 @@ include!(concat!(env!("OUT_DIR"), "/common_ffi.rs"));
 
 pub(crate) const DATA_H264_720P: &[u8] = include_bytes!("res/720p.h264");
 pub(crate) const DATA_H265_720P: &[u8] = include_bytes!("res/720p.h265");
+pub(crate) const DATA_AV1_720P: &[u8] = include_bytes!("res/720p.av1");
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Driver {
@@ -54,35 +55,43 @@ pub(crate) fn supported_gpu(_encode: bool) -> (bool, bool, bool) {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn get_video_toolbox_codec_support() -> (bool, bool, bool, bool) {
+pub(crate) fn get_video_toolbox_codec_support() -> (bool, bool, bool, bool, bool, bool) {
     use std::ffi::c_void;
 
     extern "C" {
         fn checkVideoToolboxSupport(
             h264_encode: *mut i32,
             h265_encode: *mut i32,
+            av1_encode: *mut i32,
             h264_decode: *mut i32,
             h265_decode: *mut i32,
+            av1_decode: *mut i32,
         ) -> c_void;
     }
 
     let mut h264_encode = 0;
     let mut h265_encode = 0;
+    let mut av1_encode = 0;
     let mut h264_decode = 0;
     let mut h265_decode = 0;
+    let mut av1_decode = 0;
     unsafe {
         checkVideoToolboxSupport(
             &mut h264_encode as *mut _,
             &mut h265_encode as *mut _,
+            &mut av1_encode as *mut _,
             &mut h264_decode as *mut _,
             &mut h265_decode as *mut _,
+            &mut av1_decode as *mut _,
         );
     }
     (
         h264_encode == 1,
         h265_encode == 1,
+        av1_encode == 1,
         h264_decode == 1,
         h265_decode == 1,
+        av1_decode == 1,
     )
 }
 

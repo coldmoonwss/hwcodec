@@ -182,6 +182,13 @@ impl Decoder {
                     priority: Priority::Good as _,
                     ..Default::default()
                 });
+                codecs.push(CodecInfo {
+                    name: "av1".to_owned(),
+                    format: AV1,
+                    hwdevice: AV_HWDEVICE_TYPE_CUDA,
+                    priority: Priority::Good as _,
+                    ..Default::default()
+                });
             }
         }
 
@@ -198,6 +205,13 @@ impl Decoder {
                 CodecInfo {
                     name: "hevc".to_owned(),
                     format: H265,
+                    hwdevice: AV_HWDEVICE_TYPE_D3D11VA,
+                    priority: Priority::Best as _,
+                    ..Default::default()
+                },
+                CodecInfo {
+                    name: "av1".to_owned(),
+                    format: AV1,
                     hwdevice: AV_HWDEVICE_TYPE_D3D11VA,
                     priority: Priority::Best as _,
                     ..Default::default()
@@ -227,10 +241,10 @@ impl Decoder {
 
         #[cfg(target_os = "macos")]
         {
-            let (_, _, h264, h265) = crate::common::get_video_toolbox_codec_support();
+            let (_, _, _, h264, h265, av1) = crate::common::get_video_toolbox_codec_support();
             debug!(
-                "VideoToolbox decode support - H264: {}, H265: {}",
-                h264, h265
+                "VideoToolbox decode support - H264: {}, H265: {}, AV1: {}",
+                h264, h265, av1
             );
             if h264 {
                 codecs.push(CodecInfo {
@@ -250,11 +264,21 @@ impl Decoder {
                     ..Default::default()
                 });
             }
+            if av1 {
+                codecs.push(CodecInfo {
+                    name: "av1".to_owned(),
+                    format: AV1,
+                    hwdevice: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+                    priority: Priority::Best as _,
+                    ..Default::default()
+                });
+            }
         }
 
         let mut res = Vec::<CodecInfo>::new();
         let buf264 = &crate::common::DATA_H264_720P[..];
         let buf265 = &crate::common::DATA_H265_720P[..];
+        let bufav1 = &crate::common::DATA_AV1_720P[..];
 
         for codec in codecs {
             // Skip if this format already exists in results
@@ -282,6 +306,7 @@ impl Decoder {
                     let data = match codec.format {
                         H264 => buf264,
                         H265 => buf265,
+                        AV1 => bufav1,
                         _ => {
                             log::error!("Unsupported format: {:?}, skipping", codec.format);
                             continue;

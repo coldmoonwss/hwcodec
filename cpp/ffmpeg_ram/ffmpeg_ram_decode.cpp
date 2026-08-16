@@ -22,6 +22,10 @@ extern "C" {
 #include "common.h"
 #include "system.h"
 
+#ifdef HWCODEC_VT_AV1
+#include "../vt/vt_av1_decode.h"
+#endif
+
 // #define CFG_PKG_TRACE
 
 namespace {
@@ -44,6 +48,9 @@ public:
   int thread_count_ = 1;
   RamDecodeCallback callback_ = NULL;
   DataFormat data_format_;
+#ifdef HWCODEC_VT_AV1
+  void *vt_av1_decoder_ = NULL;
+#endif
 
 #ifdef CFG_PKG_TRACE
   int in_ = 0;
@@ -61,6 +68,12 @@ public:
   ~FFmpegRamDecoder() {}
 
   void free_decoder() {
+#ifdef HWCODEC_VT_AV1
+    if (vt_av1_decoder_) {
+      vt_av1_decoder_destroy(vt_av1_decoder_);
+      vt_av1_decoder_ = NULL;
+    }
+#endif
     if (frame_)
       av_frame_free(&frame_);
     if (pkt_)
@@ -83,11 +96,26 @@ public:
       data_format_ = DataFormat::H264;
     } else if (name_.find("hevc") != std::string::npos) {
       data_format_ = DataFormat::H265;
+    } else if (name_.find("av1") != std::string::npos) {
+      data_format_ = DataFormat::AV1;
     } else {
       LOG_ERROR(std::string("unsupported data format:") + name_);
       return -1;
     }
     free_decoder();
+#ifdef HWCODEC_VT_AV1
+    // FFmpeg before 8.0 has no av1_videotoolbox hwaccel, use the native
+    // VideoToolbox decoder instead.
+    if (data_format_ == DataFormat::AV1 &&
+        device_type_ == AV_HWDEVICE_TYPE_VIDEOTOOLBOX) {
+      // callback_ takes an enum AVPixelFormat pixfmt, VTAv1DecodeCallback an
+      // int; same ABI, and the reported values are plain AVPixelFormat ints.
+      vt_av1_decoder_ =
+          vt_av1_decoder_create((VTAv1DecodeCallback)callback_,
+                                (int)AV_PIX_FMT_NV12, (int)AV_PIX_FMT_YUV420P);
+      return vt_av1_decoder_ ? 0 : -1;
+    }
+#endif
     const AVCodec *codec = NULL;
     hwaccel_ = device_type_ != AV_HWDEVICE_TYPE_NONE;
     int ret;
@@ -157,6 +185,11 @@ public:
 
   int decode(const uint8_t *data, int length, const void *obj) {
     int ret = -1;
+#ifdef HWCODEC_VT_AV1
+    if (vt_av1_decoder_) {
+      return vt_av1_decoder_decode(vt_av1_decoder_, data, length, obj);
+    }
+#endif
 #ifdef CFG_PKG_TRACE
     in_++;
     LOG_DEBUG(std::string("delay DI: in:") + in_ + " out:" + out_);

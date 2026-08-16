@@ -70,6 +70,9 @@ fn build_common(builder: &mut Build) {
         let macos_path = _platform_path.join("mac");
         builder.include(&macos_path);
         builder.file(macos_path.join("mac.mm"));
+        // native VideoToolbox AV1 decoder (no FFmpeg hwaccel in n7.1)
+        builder.define("HWCODEC_VT_AV1", None);
+        builder.file(manifest_dir.join("cpp").join("vt").join("vt_av1_decode.mm"));
     }
 
     // tool

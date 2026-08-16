@@ -229,6 +229,17 @@ impl Encoder {
                     ..Default::default()
                 });
             }
+            if _nv {
+                // av1_nvenc is not tracked by the vram sdk list, no contains() check.
+                // Creation fails on GPUs without AV1 encode (pre-Ada), so it is
+                // filtered out by the validation encode below.
+                codecs.push(CodecInfo {
+                    name: "av1_nvenc".to_owned(),
+                    format: AV1,
+                    priority: Priority::Best as _,
+                    ..Default::default()
+                });
+            }
             if amf && contains(Driver::AMF, H264) {
                 codecs.push(CodecInfo {
                     name: "h264_amf".to_owned(),
@@ -266,7 +277,7 @@ impl Encoder {
 
         #[cfg(target_os = "macos")]
         {
-            let (_h264, h265, _, _) = crate::common::get_video_toolbox_codec_support();
+            let (_h264, h265, av1, _, _, _) = crate::common::get_video_toolbox_codec_support();
             // h264 encode failed too often, not AV_CODEC_CAP_HARDWARE
             // if h264 {
             //     codecs.push(CodecInfo {
@@ -280,6 +291,18 @@ impl Encoder {
                 codecs.push(CodecInfo {
                     name: "hevc_videotoolbox".to_owned(),
                     format: H265,
+                    priority: Priority::Best as _,
+                    ..Default::default()
+                });
+            }
+            if av1 {
+                // av1_videotoolbox only exists in FFmpeg built with the
+                // corresponding patch, and only Apple Silicon chips with an
+                // AV1 encode engine report support. Both gate this entry; the
+                // validation encode below filters out any remaining mismatch.
+                codecs.push(CodecInfo {
+                    name: "av1_videotoolbox".to_owned(),
+                    format: AV1,
                     priority: Priority::Best as _,
                     ..Default::default()
                 });

@@ -16,8 +16,7 @@
 #endif
 
 // ---------------------- Core: More Robust Hardware Encoder Detection ----------------------
-static int32_t hasHardwareEncoder(bool h265) {
-    CMVideoCodecType codecType = h265 ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264;
+static int32_t hasHardwareEncoder(CMVideoCodecType codecType) {
 
     // ---------- Path A: Quick Query with Enable + Require ----------
     // Note: Require implies Enable, but setting both here makes it easier to bypass the strategy on some models that default to a software encoder.
@@ -91,14 +90,24 @@ static int32_t hasHardwareEncoder(bool h265) {
     return isHW ? 1 : 0;
 }
 
-// -------------- Your Public Interface: Unchanged ------------------
-extern "C" void checkVideoToolboxSupport(int32_t *h264Encoder, int32_t *h265Encoder, int32_t *h264Decoder, int32_t *h265Decoder) {
+// -------------- Public Interface ------------------
+// kCMVideoCodecType_AV1 is only declared in the macOS 13+ SDK headers.
+// It is a FourCC enum constant ('av01'), so a plain fallback is safe.
+#ifndef kCMVideoCodecType_AV1
+#define kCMVideoCodecType_AV1 ((CMVideoCodecType)'av01')
+#endif
+
+extern "C" void checkVideoToolboxSupport(int32_t *h264Encoder, int32_t *h265Encoder, int32_t *av1Encoder, int32_t *h264Decoder, int32_t *h265Decoder, int32_t *av1Decoder) {
     // https://stackoverflow.com/questions/50956097/determine-if-ios-device-can-support-hevc-encoding
     *h264Encoder = 0; // H.264 encoder support is disabled due to frequent reliability issues (see encode.rs)
-    *h265Encoder = hasHardwareEncoder(true);
+    *h265Encoder = hasHardwareEncoder(kCMVideoCodecType_HEVC);
+    // AV1 hardware encoding exists only on some Apple Silicon chips; 0 elsewhere.
+    *av1Encoder = hasHardwareEncoder(kCMVideoCodecType_AV1);
 
     *h264Decoder = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
     *h265Decoder = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC);
+    // Hardware AV1 decode exists on Apple Silicon M3 and later; returns 0 elsewhere.
+    *av1Decoder = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
 
     return;
 }
@@ -106,10 +115,12 @@ extern "C" void checkVideoToolboxSupport(int32_t *h264Encoder, int32_t *h265Enco
 extern "C" uint64_t GetHwcodecGpuSignature() {
     int32_t h264Encoder = 0;
     int32_t h265Encoder = 0;
+    int32_t av1Encoder = 0;
     int32_t h264Decoder = 0;
     int32_t h265Decoder = 0;
-    checkVideoToolboxSupport(&h264Encoder, &h265Encoder, &h264Decoder, &h265Decoder);
-    return (uint64_t)h264Encoder << 24 | (uint64_t)h265Encoder << 16 | (uint64_t)h264Decoder << 8 | (uint64_t)h265Decoder;
+    int32_t av1Decoder = 0;
+    checkVideoToolboxSupport(&h264Encoder, &h265Encoder, &av1Encoder, &h264Decoder, &h265Decoder, &av1Decoder);
+    return (uint64_t)av1Encoder << 40 | (uint64_t)av1Decoder << 32 | (uint64_t)h264Encoder << 24 | (uint64_t)h265Encoder << 16 | (uint64_t)h264Decoder << 8 | (uint64_t)h265Decoder;
 }
 
 static void *parent_death_monitor_thread(void *arg) {
